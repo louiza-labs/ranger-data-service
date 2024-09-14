@@ -1,14 +1,18 @@
 {
-  "name": "ranger-data-service",
-  "scripts": {
-    "dev": "bun run --hot src/index.ts"
-  },
-  "dependencies": {
-    "axios": "^1.7.7",
-    "hono": "^4.5.11",
-    "pino": "^9.4.0"
-  },
-  "devDependencies": {
-    "@types/bun": "latest"
-  }
+	"name": "hermes-data-service",
+	"scripts": {
+		"dev": "bun run --hot src/index.ts",
+		"start": "bun run src/index.ts"
+	},
+	"dependencies": {
+		"@supabase/supabase-js": "^2.45.4",
+		"axios": "^1.7.7",
+		"hono": "^4.5.11",
+		"pino": "^9.4.0",
+		"twitter-api-sdk": "^1.2.1"
+	},
+	"devDependencies": {
+		"@flydotio/dockerfile": "^0.5.8",
+		"@types/bun": "latest"
+	}
 }

@@ -1,9 +1,8 @@
 // src/routes/alertsRoute.ts
 import { Hono } from "hono";
-import { fetchNewYork311AlertHandler } from "../../handlers/alerts";
-
+import preferencesRoutes from "./preferences";
 const accountRoute = new Hono();
 
-accountRoute.get("/", fetchNewYork311AlertHandler);
+accountRoute.route("/account/preferences", preferencesRoutes);
 
 export default accountRoute;

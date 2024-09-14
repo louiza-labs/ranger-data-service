@@ -1,48 +1,52 @@
-import axios from "axios";
+import { createClient } from "@supabase/supabase-js";
 
-export async function fetch311Alerts() {
+interface taglineObject {
+	tagline: string;
+	hash: string;
+}
+
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseAnonKey = process.env.SUPABASE_ANON_KEY;
+const supabase = createClient(supabaseUrl as string, supabaseAnonKey as string);
+
+export async function uploadTwitterFollowers(connections: any[]) {
 	try {
-		const response = await axios.get("https://data.cityofnewyork.us/resource/erm2-nwe9.json", {
-			headers: {
-				"X-App_Token": process.env.NYC_OPEN_DATA_APP_TOKEN, // Add the HTTP header
-			},
-			timeout: 10000,
-		});
+		const { data, error } = await supabase
+			.from("linkedin-connections") // Replace with your table name
+			.upsert(connections, {
+				onConflict: "url", // Column(s) to match on for upsert
+			});
 
-		// Map the response data to the desired format
-		return response.data;
+		if (error) {
+			console.error("Error upserting connections:", error);
+			return { success: false, error };
+		}
+
+		console.log("Upserted connections:", data);
+		return { success: true, data };
 	} catch (e) {
-		console.log(e);
+		return { success: false, e };
 	}
 }
 
-export async function fetchEmergencyServicesAlerts() {
+export async function getTwitterFollowersg() {
 	try {
-		const response = await axios.get("https://data.cityofnewyork.us/resource/pasr-j7fb.json", {
-			headers: {
-				"X-App_Token": process.env.NYC_OPEN_DATA_APP_TOKEN, // Add the HTTP header
-			},
-		});
+		const { data, error } = await supabase.from("linkedin-connections").select("*");
 
-		// Map the response data to the desired format
-		return response.data;
+		if (error) {
+			console.error("Error fetching linkedIn connections:", error);
+			return { success: false, error, data: [] };
+		}
+
+		if (data) {
+			// Parse JSON fields back into their original object format
+
+			return { success: true, data };
+		} else {
+			return { success: true, data: [] }; // No data returned
+		}
 	} catch (e) {
-		console.log(e);
-	}
-}
-
-export async function fetchEmergencyNotifications() {
-	try {
-		const url = "https://data.cityofnewyork.us/resource/8vv7-7wx3.json";
-		const response = await axios.get(url, {
-			headers: {
-				"X-App_Token": process.env.NYC_OPEN_DATA_APP_TOKEN, // Add the HTTP header
-			},
-		});
-
-		// Map the response data to the desired format
-		return response.data;
-	} catch (e) {
-		console.log(e);
+		console.error("Error fetching linkedin connections:", e);
+		return { success: false, error: e, data: [] };
 	}
 }

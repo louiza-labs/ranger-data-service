@@ -1,9 +1,9 @@
 // src/routes/alertsRoute.ts
 import { Hono } from "hono";
-import { fetchNewYork311AlertHandler } from "../../../handlers/alerts";
+import { fetchIcebreakerConnections } from "../../../handlers/connections/icebreaker";
 
 const iceBreakerConnectionsRoute = new Hono();
 
-iceBreakerConnectionsRoute.get("/", fetchNewYork311AlertHandler);
+iceBreakerConnectionsRoute.get("/", fetchIcebreakerConnections);
 
 export default iceBreakerConnectionsRoute;

@@ -1,9 +1,9 @@
 // src/routes/alertsRoute.ts
 import { Hono } from "hono";
-import { fetchNewYork311AlertHandler } from "../../../handlers/alerts";
+import { fetchLinkedInConnectionsHandler } from "../../../handlers/connections/linkedin";
 
 const linkedInConnectionsRoute = new Hono();
 
-linkedInConnectionsRoute.get("/", fetchNewYork311AlertHandler);
+linkedInConnectionsRoute.get("/", fetchLinkedInConnectionsHandler);
 
 export default linkedInConnectionsRoute;

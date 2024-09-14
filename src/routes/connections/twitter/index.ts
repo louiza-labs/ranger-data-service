@@ -1,9 +1,9 @@
 // src/routes/alertsRoute.ts
 import { Hono } from "hono";
-import { fetchNewYork311AlertHandler } from "../../../handlers/alerts";
+import { fetchTwitterFollowersHandler } from "../../../handlers/connections/twitter";
 
 const twitterConnectionsRoute = new Hono();
 
-twitterConnectionsRoute.get("/", fetchNewYork311AlertHandler);
+twitterConnectionsRoute.get("/:id", fetchTwitterFollowersHandler);
 
 export default twitterConnectionsRoute;
