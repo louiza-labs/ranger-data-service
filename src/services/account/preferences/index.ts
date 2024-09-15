@@ -12,6 +12,7 @@ const supabase = createClient(supabaseUrl as string, supabaseAnonKey as string);
 export async function uploadPreference({ user_id, type, value }: any) {
 	try {
 		const newPreference = { user_id, type, value };
+		console.log("the new preference", newPreference);
 		const { data, error } = await supabase
 			.from("preferences") // Replace with your table name
 			.upsert(newPreference);

@@ -2,7 +2,8 @@
 	"name": "hermes-data-service",
 	"scripts": {
 		"dev": "bun run --hot src/index.ts",
-		"start": "bun run src/index.ts"
+		"start": "bun run src/index.ts",
+		"fun": "bun run src/lib/fun/index.ts"
 	},
 	"dependencies": {
 		"@supabase/supabase-js": "^2.45.4",

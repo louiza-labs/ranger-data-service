@@ -16,6 +16,6 @@ app.route("/api", connectionsRoute);
 app.route("/api", accountRoute);
 
 export default {
-	port: 3000,
+	port: 8000,
 	fetch: app.fetch,
 };
