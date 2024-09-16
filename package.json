@@ -10,6 +10,7 @@
 		"axios": "^1.7.7",
 		"hono": "^4.5.11",
 		"pino": "^9.4.0",
+		"postmark": "^4.0.5",
 		"twitter-api-sdk": "^1.2.1"
 	},
 	"devDependencies": {
