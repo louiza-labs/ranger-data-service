@@ -69,7 +69,6 @@ export async function getJobsFromLinkedinFromDB() {
 			return { success: false, error };
 		}
 
-		console.log("Got jobs:", data);
 		return { success: true, data };
 	} catch (e) {
 		return { success: false, e };
