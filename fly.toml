@@ -11,8 +11,29 @@ primary_region = 'sjc'
 [env]
   PORT = '8080'
 
+# fly.toml
+[[processes]]
+  name = "cron"
+  command = ["bun", "run", "src/cron/email/index.ts"]
+
+[[processes]]
+  name = "app"
+  command = ["bun", "run", "src/index.ts"] 
+  
+[[services]]
+  processes = ["cron"]
+  [[services.ports]]
+    handlers = ["http"]
+    port = 8080
+
+[[jobs]]
+  name = "hourly_email_job"
+  schedule = "@hourly"
+  command = ["bun", "run", "src/cron/email/index.ts"]
+
+
 [http_service]
-  internal_port = 3000
+  internal_port = 8080
   force_https = true
   auto_stop_machines = 'stop'
   auto_start_machines = true
