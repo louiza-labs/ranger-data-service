@@ -15,6 +15,7 @@ interface JobListing {
 	agoTime: string;
 	salary: string;
 	jobUrl: string;
+	job_id: string;
 }
 
 const supabaseUrl = process.env.SUPABASE_URL;
@@ -66,12 +67,12 @@ export async function getJobsFromLinkedinFromDB() {
 
 		if (error) {
 			console.error("Error getting jobs:", error);
-			return { success: false, error };
+			return { success: false, error, data: [] };
 		}
 
 		return { success: true, data };
 	} catch (e) {
-		return { success: false, e };
+		return { success: false, e, data: [] };
 	}
 }
 

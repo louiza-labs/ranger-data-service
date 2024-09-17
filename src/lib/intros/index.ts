@@ -1,4 +1,4 @@
-import { Connection, Preference } from "../../../types";
+import { Connection, JobListing, Preference } from "../../../types";
 
 export const generateWarmIntros = (connections: Connection[], preferences: Preference) => {
 	// Create sets once outside the filter loop
@@ -71,3 +71,34 @@ export function convertPreferencesFromDB(
 
 	return result;
 }
+
+export const generateMatchingJobsForConnections = (
+	connections: Connection[],
+	preferences: Preference,
+	jobs: JobListing[]
+) => {
+	// Create sets for positions and companies once outside the loop
+	const positionsSet = new Set((preferences.position ?? []).map((pos) => pos.trim().toLowerCase()));
+	const companiesSet = new Set((preferences.company ?? []).map((comp) => comp.trim().toLowerCase()));
+
+	return jobs.filter((job: JobListing) => {
+		const jobPosition = job.position?.toLowerCase();
+		const jobCompany = job.company?.toLowerCase();
+
+		// Match based on company or position preferences
+		const positionMatch =
+			positionsSet.size === 0 ||
+			Array.from(positionsSet).some((preferredPosition) => jobPosition.includes(preferredPosition));
+		const companyMatch = companiesSet.size === 0 || companiesSet.has(jobCompany);
+
+		// Check if the job's company matches any connection's company
+		const companyMatchesConnection = connections.some(
+			(connection: Connection) => connection.Company?.toLowerCase() === jobCompany
+		);
+
+		// Return the job if either:
+		// 1. The job's position matches a preferred position, OR
+		// 2. The job's company matches a preferred company or connection's company
+		return (positionMatch || companyMatch) && companyMatchesConnection;
+	});
+};

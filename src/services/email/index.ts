@@ -22,6 +22,18 @@ type ExtractedProfile = {
 	profile_url: string;
 };
 
+export interface JobListing {
+	position: string;
+	company: string;
+	companyLogo: string;
+	location: string;
+	date: string;
+	agoTime: string;
+	salary: string;
+	jobUrl: string;
+	job_id: string;
+}
+
 const extractProfiles = (connections: Connection[]): ExtractedProfile[] => {
 	return connections.map((connection) => ({
 		profile_name: `${connection["First Name"]} ${connection["Last Name"]}`,
@@ -33,11 +45,12 @@ const extractProfiles = (connections: Connection[]): ExtractedProfile[] => {
 
 interface sendEmailArgs {
 	recommendedProfiles: Connection[];
+	recommendedPositions: JobListing[];
 	user: any;
 }
 
 export const sendEmail = async (args: sendEmailArgs) => {
-	const { recommendedProfiles, user } = args;
+	const { recommendedProfiles, recommendedPositions, user } = args;
 	var client = new postmark.ServerClient(process.env.POSTMARK_API_KEY);
 
 	// Extract the profile details
@@ -71,11 +84,18 @@ export const sendEmail = async (args: sendEmailArgs) => {
 		templateModel[`rec_${profileNumber}_profile_url`] = profile.profile_url;
 	});
 
+	recommendedPositions.forEach((position, index) => {
+		const positionNumber = index + 1; // pos_1, pos_2, etc.
+		templateModel[`pos_${positionNumber}_company`] = position.company;
+		templateModel[`pos_${positionNumber}_position`] = position.position;
+		templateModel[`pos_${positionNumber}_jobUrl`] = position.jobUrl;
+	});
+
 	// Send the email with the template and the filled-in profile information
 	await client.sendEmailWithTemplate({
 		From: "joe@louiza.xyz",
 		To: user.email,
-		TemplateAlias: "welcome",
+		TemplateAlias: "code-your-own-4",
 		TemplateModel: templateModel,
 	});
 };

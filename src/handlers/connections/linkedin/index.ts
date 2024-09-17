@@ -10,7 +10,6 @@ export async function fetchLinkedInConnectionsHandler(c: any) {
 
 export async function fetchLinkedInConnectionsAtRelevantJobsHandler(c: any) {
 	const user_id = c.req.query("user_id");
-	console.log("the user_id", user_id);
 	const { data: connections } = await getLinkedinConnectionsFromDB();
 	const { data: preferences } = await getPreferences({ user_id });
 	const { data: jobs } = await getJobsFromLinkedinFromDB();
