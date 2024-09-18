@@ -14,11 +14,11 @@ primary_region = 'sjc'
 # fly.toml
 [[processes]]
   name = "cron"
-  command = ["bun", "run", "src/cron/email/index.ts"]
+  command = "bun run src/cron/email/index.ts"
 
 [[processes]]
   name = "app"
-  command = ["bun", "run", "src/index.ts"] 
+  command = "bun run src/index.ts"
   
 [[services]]
   processes = ["cron"]

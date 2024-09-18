@@ -9,7 +9,13 @@ const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseAnonKey = process.env.SUPABASE_ANON_KEY;
 const supabase = createClient(supabaseUrl as string, supabaseAnonKey as string);
 
-export async function uploadPreference({ user_id, type, value }: any) {
+interface IPreference {
+	user_id: string;
+	type: "position" | "company";
+	value: string;
+}
+
+export async function uploadPreference({ user_id, type, value }: IPreference) {
 	try {
 		const newPreference = { user_id, type, value };
 		console.log("the new preference", newPreference);
@@ -29,7 +35,25 @@ export async function uploadPreference({ user_id, type, value }: any) {
 	}
 }
 
-export async function getPreferences({ user_id }: any) {
+export async function uploadMultiplePreferences({ preferences }: { preferences: IPreference[] }) {
+	try {
+		const { data, error } = await supabase
+			.from("preferences") // Replace with your table name
+			.upsert(preferences);
+
+		if (error) {
+			console.error("Error upserting connections:", error);
+			return { success: false, error };
+		}
+
+		console.log("Upserted connections:", data);
+		return { success: true, data };
+	} catch (e) {
+		return { success: false, e };
+	}
+}
+
+export async function getPreferences({ user_id }: { user_id: string }) {
 	try {
 		const { data, error } = await supabase.from("preferences").select("*").eq("user_id", user_id);
 
@@ -51,7 +75,7 @@ export async function getPreferences({ user_id }: any) {
 	}
 }
 
-export async function deletePreferences({ user_id, type, value }: any) {
+export async function deletePreferences({ user_id, type, value }: IPreference) {
 	try {
 		const { data, error } = await supabase
 			.from("preferences")
