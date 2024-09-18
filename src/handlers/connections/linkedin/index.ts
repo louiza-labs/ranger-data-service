@@ -3,14 +3,15 @@ import { getLinkedinConnectionsFromDB } from "../../../services/connections/link
 import { getJobsFromLinkedinFromDB } from "../../../services/jobs/";
 
 export async function fetchLinkedInConnectionsHandler(c: any) {
-	const connections = await getLinkedinConnectionsFromDB();
+	const { user_id } = c.req.query();
+	const connections = await getLinkedinConnectionsFromDB({ user_id });
 	// const normalizedAlerts = normalizeAlertsData(con, "test", "los-angeles");
 	return c.json(connections);
 }
 
 export async function fetchLinkedInConnectionsAtRelevantJobsHandler(c: any) {
 	const user_id = c.req.query("user_id");
-	const { data: connections } = await getLinkedinConnectionsFromDB();
+	const { data: connections } = await getLinkedinConnectionsFromDB({ user_id });
 	const { data: preferences } = await getPreferences({ user_id });
 	const { data: jobs } = await getJobsFromLinkedinFromDB();
 

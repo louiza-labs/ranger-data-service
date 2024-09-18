@@ -27,9 +27,12 @@ export async function uploadConnections(connections: any[]) {
 	}
 }
 
-export async function getLinkedinConnectionsFromDB() {
+export async function getLinkedinConnectionsFromDB({ user_id }: { user_id: string }) {
 	try {
-		const { data, error } = await supabase.from("linkedin-connections").select("*");
+		const { data, error } = await supabase
+			.from("linkedin-connections")
+			.select("*")
+			.eq("user_id_for_connection", user_id);
 
 		if (error) {
 			console.error("Error fetching linkedIn connections:", error);
