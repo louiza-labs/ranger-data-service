@@ -30,13 +30,13 @@ export async function createUser({ user_id, name, email }: { user_id: string; na
 	}
 }
 
-export async function getUser({ user_id }: any) {
+export async function getUser({ user_id }: { user_id: string }) {
 	try {
 		const { data, error } = await supabase.from("users").select("*").eq("user_id", user_id);
 
 		if (error) {
 			console.error("Error fetching user:", error);
-			return { success: false, error, data: [] };
+			return { success: false, error, data: {} };
 		}
 
 		if (data && data.length) {
@@ -45,7 +45,30 @@ export async function getUser({ user_id }: any) {
 
 			return { success: true, data: user };
 		} else {
-			return { success: true, data: [] }; // No data returned
+			return { success: true, data: {} }; // No data returned
+		}
+	} catch (e) {
+		console.error("Error fetching user:", e);
+		return { success: false, error: e, data: [] };
+	}
+}
+
+export async function getUserWithEmail({ email }: { email: string }) {
+	try {
+		const { data, error } = await supabase.from("users").select("*").eq("email", email);
+
+		if (error) {
+			console.error("Error fetching user:", error);
+			return { success: false, error, data: {} };
+		}
+
+		if (data && data.length) {
+			const user = data[0];
+			// Parse JSON fields back into their original object format
+
+			return { success: true, data: user };
+		} else {
+			return { success: true, data: {} }; // No data returned
 		}
 	} catch (e) {
 		console.error("Error fetching user:", e);
