@@ -7,7 +7,7 @@ import { getJobsFromLinkedinFromDB } from "../../services/jobs";
 async function sendEmailForUser({ user_id }: { user_id: string }) {
 	// const { email, preferences } = await c.req.json();
 	const { data: user } = await getUser({ user_id });
-	const { data: connections } = await getLinkedinConnectionsFromDB();
+	const { data: connections } = await getLinkedinConnectionsFromDB({ user_id });
 	const { data: preferences } = await getPreferences({ user_id });
 	const { data: jobs } = await getJobsFromLinkedinFromDB();
 

@@ -2,7 +2,6 @@ import { deletePreferences, getPreferences, uploadPreference } from "../../../se
 
 export async function addPreferenceForUser(c: any) {
 	const body = await c.req.json();
-	console.log("the body", body);
 
 	const { type, value, user_id } = body;
 

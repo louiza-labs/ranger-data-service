@@ -41,7 +41,7 @@ export async function getRelevantJobsByConnectionsAndPreferences(c: any) {
 
 	const { data: jobsFromDB } = await getJobsFromLinkedinFromDB();
 	const { data: preferences } = await getPreferences({ user_id });
-	const { data: connections } = await getLinkedinConnectionsFromDB();
+	const { data: connections } = await getLinkedinConnectionsFromDB({ user_id });
 
 	const filteredConnections = connections.filter((connection) => {
 		return connection.Company;
