@@ -33,6 +33,6 @@ export async function verifyUsernameAndEmail({ username, email }: { username: st
 		return { success: true, data: { usernameExists, emailExists } };
 	} catch (e) {
 		console.error("Error fetching user:", e);
-		return { success: false, error: e, data: [] };
+		return { success: false, error: e, data: {} };
 	}
 }

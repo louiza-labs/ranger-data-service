@@ -13,9 +13,7 @@ export async function uploadConnections(connections: any[]) {
 	try {
 		const { data, error } = await supabase
 			.from("linkedin-connections") // Replace with your table name
-			.upsert(connections, {
-				onConflict: "url", // Column(s) to match on for upsert
-			});
+			.upsert(connections);
 
 		if (error) {
 			console.error("Error upserting connections:", error);

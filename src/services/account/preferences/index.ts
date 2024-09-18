@@ -42,11 +42,11 @@ export async function uploadMultiplePreferences({ preferences }: { preferences: 
 			.upsert(preferences);
 
 		if (error) {
-			console.error("Error upserting connections:", error);
+			console.error("Error upserting preferences:", error);
 			return { success: false, error };
 		}
 
-		console.log("Upserted connections:", data);
+		console.log("Upserted preferences:", data);
 		return { success: true, data };
 	} catch (e) {
 		return { success: false, e };

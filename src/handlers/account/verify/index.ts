@@ -13,6 +13,6 @@ export async function verifyAccountHandler(c: any) {
 
 		return c.json({ message: "Success looking up account", accountLookupResults, success });
 	} catch (error) {
-		return c.json({ message: error, success: false });
+		return c.json({ message: error, accountLookupResults: {}, success: false });
 	}
 }

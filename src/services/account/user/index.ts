@@ -9,7 +9,7 @@ const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseAnonKey = process.env.SUPABASE_ANON_KEY;
 const supabase = createClient(supabaseUrl as string, supabaseAnonKey as string);
 
-export async function createUser({ user_id, name, email }: any) {
+export async function createUser({ user_id, name, email }: { user_id: string; name: string; email: string }) {
 	try {
 		const newUser = { user_id, name, email };
 		const { data, error } = await supabase
@@ -19,11 +19,11 @@ export async function createUser({ user_id, name, email }: any) {
 			});
 
 		if (error) {
-			console.error("Error upserting connections:", error);
+			console.error("Error creating user:", error);
 			return { success: false, error };
 		}
 
-		console.log("Upserted connections:", data);
+		console.log("created user:", data);
 		return { success: true, data };
 	} catch (e) {
 		return { success: false, e };
