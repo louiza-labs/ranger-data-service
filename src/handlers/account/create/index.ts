@@ -19,7 +19,7 @@ export async function createAccountHandler(c: any) {
 		const { success: preferencesUploaded } = await uploadMultiplePreferences({ preferences });
 		if (!preferencesUploaded) throw new Error("Preferences upload failed");
 
-		const { success: connectionsUploaded } = await uploadConnections(connections);
+		const { success: connectionsUploaded } = await uploadConnections({ connections, user_id: username });
 		if (!connectionsUploaded) throw new Error("Connections upload failed");
 
 		return c.json({ message: "Success creating account", success: true });
