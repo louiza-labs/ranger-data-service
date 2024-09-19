@@ -9,11 +9,19 @@ const supabaseUrl = process.env.SUPABASE_URL;
 const supabaseAnonKey = process.env.SUPABASE_ANON_KEY;
 const supabase = createClient(supabaseUrl as string, supabaseAnonKey as string);
 
-export async function uploadConnections(connections: any[]) {
+export async function uploadConnections({ connections, user_id }: { connections: any[]; user_id: string }) {
 	try {
+		const formattedConnections = connections.map((connection) => {
+			return {
+				...connection,
+				user_id_username_identifier: `${user_id}-${connection.UserName}`,
+			};
+		});
 		const { data, error } = await supabase
 			.from("linkedin-connections") // Replace with your table name
-			.upsert(connections);
+			.upsert(formattedConnections, {
+				onConflict: "user_id_username_identifier",
+			});
 
 		if (error) {
 			console.error("Error upserting connections:", error);
