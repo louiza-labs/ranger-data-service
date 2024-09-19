@@ -18,17 +18,19 @@ interface IPreference {
 export async function uploadPreference({ user_id, type, value }: IPreference) {
 	try {
 		const newPreference = { user_id, type, value };
-		console.log("the new preference", newPreference);
+		const preferenceWithIdentifier = {
+			...newPreference,
+			user_based_identifier: `${type}-${value}-${user_id}`,
+		};
 		const { data, error } = await supabase
 			.from("preferences") // Replace with your table name
-			.upsert(newPreference);
+			.upsert(preferenceWithIdentifier, { onConflict: "user_based_identifier" });
 
 		if (error) {
-			console.error("Error upserting connections:", error);
+			console.error("Error upserting preferences:", error);
 			return { success: false, error };
 		}
 
-		console.log("Upserted connections:", data);
 		return { success: true, data };
 	} catch (e) {
 		return { success: false, e };
@@ -37,16 +39,24 @@ export async function uploadPreference({ user_id, type, value }: IPreference) {
 
 export async function uploadMultiplePreferences({ preferences }: { preferences: IPreference[] }) {
 	try {
+		const formattedPreferences = preferences.map((preference) => {
+			return {
+				...preference,
+				user_based_identifier: `${preference.type}-${preference.value}-${preference.user_id}`,
+			};
+		});
+
 		const { data, error } = await supabase
 			.from("preferences") // Replace with your table name
-			.upsert(preferences);
+			.upsert(formattedPreferences, {
+				onConflict: "user_based_identifier",
+			});
 
 		if (error) {
-			console.error("Error upserting preferences:", error);
+			console.error("Error upserting multiple preferences:", error);
 			return { success: false, error };
 		}
 
-		console.log("Upserted preferences:", data);
 		return { success: true, data };
 	} catch (e) {
 		return { success: false, e };
