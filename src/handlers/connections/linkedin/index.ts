@@ -1,3 +1,4 @@
+import { filterConnectionsByCompanyPreferences, filterConnectionsByPositionPreferences } from "../../../lib/filtering";
 import { getPreferences } from "../../../services/account/preferences";
 import { getLinkedinConnectionsFromDB } from "../../../services/connections/linkedin";
 import { getJobsFromLinkedinFromDB } from "../../../services/jobs";
@@ -11,29 +12,33 @@ export async function fetchLinkedInConnectionsHandler(c: any) {
 
 export async function fetchLinkedInConnectionsAtRelevantJobsHandler(c: any) {
 	const user_id = c.req.query("user_id");
+
+	// Fetch data from DB
 	const { data: connections } = await getLinkedinConnectionsFromDB({ user_id });
 	const { data: preferences } = await getPreferences({ user_id });
 	const { data: jobs } = await getJobsFromLinkedinFromDB();
 
+	// Filter connections who work at companies
 	const filteredConnectionsForCompanies = connections.filter((connection) => connection.Company);
 
-	const connectionsWithMatchingCompanyPreferences = filteredConnectionsForCompanies.filter((connection: any) => {
-		return preferences.find(
-			(preference) =>
-				preference.type === "company" && preference.value.toLowerCase() === connection.Company.toLowerCase()
-		);
-	});
+	// Get connections based on company preferences
+	const connectionsMatchingCompanyPreferences = filterConnectionsByCompanyPreferences(
+		filteredConnectionsForCompanies,
+		jobs,
+		preferences
+	);
 
-	const connectionsAtRelevantCompaniesWithOpenPositions = connectionsWithMatchingCompanyPreferences
-		.map((connection: any) => {
-			const matchingJob = jobs?.find((job: any) => job.company.toLowerCase() === connection.Company.toLowerCase());
-			if (matchingJob) {
-				return { ...connection, matchingJob }; // Add matching job to connection
-			}
-			return null; // Return null if no matching job
-		})
-		.filter((connection) => connection !== null); // Filter out null values
+	// Get connections based on position preferences
+	const connectionsMatchingPositionPreferences = filterConnectionsByPositionPreferences(
+		filteredConnectionsForCompanies,
+		jobs,
+		preferences
+	);
 
-	// const normalizedAlerts = normalizeAlertsData(con, "test", "los-angeles");
-	return c.json(connectionsAtRelevantCompaniesWithOpenPositions);
+	// Union of both connection sets (removing duplicates)
+	const unionOfConnections = Array.from(
+		new Set([...connectionsMatchingCompanyPreferences, ...connectionsMatchingPositionPreferences])
+	);
+	// Return the filtered union of relevant connections
+	return c.json(unionOfConnections);
 }

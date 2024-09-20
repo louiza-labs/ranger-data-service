@@ -75,12 +75,21 @@ export function convertPreferencesFromDB(
 export const generateMatchingJobsForConnections = (
 	connections: Connection[],
 	preferences: Preference,
-	jobs: JobListing[]
+	jobs: JobListing[],
+	showAllJobs = false // Add showAllJobs flag
 ) => {
+	// If showAllJobs is true, return all jobs where the user has a connection at the company
+	if (showAllJobs) {
+		return jobs.filter((job: JobListing) =>
+			connections.some((connection: Connection) => connection.Company?.toLowerCase() === job.company?.toLowerCase())
+		);
+	}
+
 	// Create sets for positions and companies once outside the loop
 	const positionsSet = new Set((preferences.position ?? []).map((pos) => pos.trim().toLowerCase()));
 	const companiesSet = new Set((preferences.company ?? []).map((comp) => comp.trim().toLowerCase()));
 
+	// Filter jobs based on preferences and connections
 	return jobs.filter((job: JobListing) => {
 		const jobPosition = job.position?.toLowerCase();
 		const jobCompany = job.company?.toLowerCase();

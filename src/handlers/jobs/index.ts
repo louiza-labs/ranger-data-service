@@ -37,7 +37,7 @@ export async function getJobs(c: any) {
 }
 
 export async function getRelevantJobsByConnectionsAndPreferences(c: any) {
-	const { user_id } = await c.req.query();
+	const { user_id, showAllJobs } = await c.req.query();
 
 	const { data: jobsFromDB } = await getJobsFromLinkedinFromDB();
 	const { data: preferences } = await getPreferences({ user_id });
@@ -46,7 +46,12 @@ export async function getRelevantJobsByConnectionsAndPreferences(c: any) {
 	const filteredConnections = connections.filter((connection) => {
 		return connection.Company;
 	});
-	const filteredJobs = generateMatchingJobsForConnections(filteredConnections, preferences as any, jobsFromDB);
+	const filteredJobs = generateMatchingJobsForConnections(
+		filteredConnections,
+		preferences as any,
+		jobsFromDB,
+		showAllJobs
+	);
 
 	// If no jobs were fetched or uploaded, return an empty response
 	return c.json(filteredJobs);
