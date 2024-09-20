@@ -1,6 +1,6 @@
 import { filterConnectionsByCompanyPreferences, filterConnectionsByPositionPreferences } from "../../../lib/filtering";
 import { getPreferences } from "../../../services/account/preferences";
-import { getLinkedinConnectionsFromDB } from "../../../services/connections/linkedin";
+import { getLinkedinConnectionsFromDB, uploadConnections } from "../../../services/connections/linkedin";
 import { getJobsFromLinkedinFromDB } from "../../../services/jobs";
 
 export async function fetchLinkedInConnectionsHandler(c: any) {
@@ -41,4 +41,19 @@ export async function fetchLinkedInConnectionsAtRelevantJobsHandler(c: any) {
 	);
 	// Return the filtered union of relevant connections
 	return c.json(unionOfConnections);
+}
+
+export async function uploadConnectionsHandler(c: any) {
+	const body = await c.req.json();
+
+	const { user_id, connections } = body;
+
+	try {
+		const { success: connectionsUploaded } = await uploadConnections({ connections, user_id });
+		if (!connectionsUploaded) throw new Error("Connections upload failed");
+
+		return c.json({ message: "Success uploading connections", success: true });
+	} catch (error) {
+		return c.json({ message: error, success: false });
+	}
 }
