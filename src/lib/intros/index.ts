@@ -128,7 +128,7 @@ export const generateMatchingJobsForConnections = (
 			return positionMatch && validCompanyMatch; // This should only be true if both conditions are satisfied
 		})
 		.map((filteredJob: JobListing) => {
-			const matchingConnection = connections.find(
+			const matchingConnection = connections.filter(
 				(connection: Connection) =>
 					connection.Company && connection.Company.toLowerCase() === filteredJob.company.toLowerCase()
 			);
