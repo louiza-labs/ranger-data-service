@@ -72,42 +72,69 @@ export function convertPreferencesFromDB(
 	return result;
 }
 
+interface PreferenceFromDB {
+	id: number;
+	created_at: string;
+	type: string;
+	value: string;
+	user_id: string;
+}
+
 export const generateMatchingJobsForConnections = (
 	connections: Connection[],
-	preferences: Preference,
+	preferences: PreferenceFromDB[],
 	jobs: JobListing[],
-	showAllJobs = false // Add showAllJobs flag
+	showAllJobs = false
 ) => {
-	// If showAllJobs is true, return all jobs where the user has a connection at the company
 	if (showAllJobs) {
 		return jobs.filter((job: JobListing) =>
 			connections.some((connection: Connection) => connection.Company?.toLowerCase() === job.company?.toLowerCase())
 		);
 	}
 
-	// Create sets for positions and companies once outside the loop
-	const positionsSet = new Set((preferences.position ?? []).map((pos) => pos.trim().toLowerCase()));
-	const companiesSet = new Set((preferences.company ?? []).map((comp) => comp.trim().toLowerCase()));
+	const positionsSet = new Set(
+		preferences
+			.filter((preference: PreferenceFromDB) => preference.type === "position")
+			.map((pos) => pos.value.trim().toLowerCase())
+	);
+	const companiesSet = new Set(
+		preferences
+			.filter((preference: PreferenceFromDB) => preference.type === "company")
+			.map((comp) => comp.value.trim().toLowerCase())
+	);
 
-	// Filter jobs based on preferences and connections
-	return jobs.filter((job: JobListing) => {
-		const jobPosition = job.position?.toLowerCase();
-		const jobCompany = job.company?.toLowerCase();
+	return jobs
+		.filter((job: JobListing) => {
+			const jobPosition = job.position?.toLowerCase();
+			const jobCompany = job.company?.toLowerCase();
 
-		// Match based on company or position preferences
-		const positionMatch =
-			positionsSet.size === 0 ||
-			Array.from(positionsSet).some((preferredPosition) => jobPosition.includes(preferredPosition));
-		const companyMatch = companiesSet.size === 0 || companiesSet.has(jobCompany);
+			const positionMatch =
+				positionsSet.size === 0 ||
+				Array.from(positionsSet).some((preferredPosition) =>
+					jobPosition.toLowerCase().includes(preferredPosition.toLowerCase())
+				);
 
-		// Check if the job's company matches any connection's company
-		const companyMatchesConnection = connections.some(
-			(connection: Connection) => connection.Company?.toLowerCase() === jobCompany
-		);
+			const companyMatchesConnection = connections.some(
+				(connection: Connection) => connection.Company?.toLowerCase() === jobCompany.toLowerCase()
+			);
 
-		// Return the job if either:
-		// 1. The job's position matches a preferred position, OR
-		// 2. The job's company matches a preferred company or connection's company
-		return (positionMatch || companyMatch) && companyMatchesConnection;
-	});
+			const companyMatch = companiesSet.size === 0 || companiesSet.has(jobCompany);
+
+			// If there are company preferences, the job must match the preference and have a connection
+			const validCompanyMatch =
+				companiesSet.size > 0 ? companyMatch && companyMatchesConnection : companyMatchesConnection;
+
+			// The job must match the position and company conditions
+			return positionMatch && validCompanyMatch; // This should only be true if both conditions are satisfied
+		})
+		.map((filteredJob: JobListing) => {
+			const matchingConnection = connections.find(
+				(connection: Connection) =>
+					connection.Company && connection.Company.toLowerCase() === filteredJob.company.toLowerCase()
+			);
+			return {
+				...filteredJob,
+				matchingConnection,
+			};
+		});
 };
