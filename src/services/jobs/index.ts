@@ -49,9 +49,7 @@ export async function getJobsFromLinkedin({
 			page: String(page),
 		};
 		const res = await linkedIn.query(queryOptions);
-		const urlRes = await fetch(
-			"https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search?keywords=software&location=New+York,%20NY&f_TPR=r604800&f_JT=F&start=50"
-		);
+
 		return { data: res, count: res && res.length ? res.length : 0 };
 	} catch (e) {
 		console.error("Error fetching jobs:", e);

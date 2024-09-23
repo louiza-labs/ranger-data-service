@@ -21,14 +21,8 @@ export function filterConnectionsByCompanyPreferences(
 						preference.type === "company" && preference.value.toLowerCase() === connection.Company.toLowerCase()
 				);
 
-				const hasMatchingPositionPreference = preferences.some(
-					(preference) =>
-						preference.type === "position" &&
-						matchingJob.position.toLowerCase().includes(preference.value.toLowerCase())
-				);
-
 				// If there's either a matching company or position preference, return the connection
-				if (hasMatchingCompanyPreference || hasMatchingPositionPreference) {
+				if (hasMatchingCompanyPreference) {
 					return { ...connection, matchingJob }; // Return connection with the matching job
 				}
 			}

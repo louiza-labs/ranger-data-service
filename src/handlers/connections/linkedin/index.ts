@@ -1,4 +1,5 @@
 import { filterConnectionsByCompanyPreferences, filterConnectionsByPositionPreferences } from "../../../lib/filtering";
+import { addJobToConnection } from "../../../lib/normalization";
 import { getPreferences } from "../../../services/account/preferences";
 import { getLinkedinConnectionsFromDB, uploadConnections } from "../../../services/connections/linkedin";
 import { getJobsFromLinkedinFromDB } from "../../../services/jobs";
@@ -20,7 +21,10 @@ export async function fetchLinkedInConnectionsAtRelevantJobsHandler(c: any) {
 
 	// Filter connections who work at companies
 	const filteredConnectionsForCompanies = connections.filter((connection) => connection.Company);
-
+	const hasCompanyPreferences =
+		preferences && preferences.filter((preference) => preference.type === "company").length > 0 ? true : null;
+	const hasPositionPreferences =
+		preferences && preferences.filter((preference) => preference.type === "position").length > 0 ? true : null;
 	// Get connections based on company preferences
 	const connectionsMatchingCompanyPreferences = filterConnectionsByCompanyPreferences(
 		filteredConnectionsForCompanies,
@@ -35,12 +39,27 @@ export async function fetchLinkedInConnectionsAtRelevantJobsHandler(c: any) {
 		preferences
 	);
 
+	const connectionsMatchingBothPreferences = connectionsMatchingCompanyPreferences.filter((connection) =>
+		connectionsMatchingPositionPreferences.some(
+			(posConnection) => posConnection.UserName === connection.UserName // Assuming each connection has a unique 'id'
+		)
+	);
+
+	if (hasCompanyPreferences) {
+		return c.json(connectionsMatchingBothPreferences);
+	} else if (hasPositionPreferences) {
+		return c.json(connectionsMatchingPositionPreferences);
+	} else {
+		const allConnectionsWithJobs = addJobToConnection(filteredConnectionsForCompanies, jobs);
+		return c.json(allConnectionsWithJobs);
+	}
+
 	// Union of both connection sets (removing duplicates)
 	const unionOfConnections = Array.from(
 		new Set([...connectionsMatchingCompanyPreferences, ...connectionsMatchingPositionPreferences])
 	);
 	// Return the filtered union of relevant connections
-	return c.json(unionOfConnections);
+	return c.json(connectionsMatchingBothPreferences);
 }
 
 export async function uploadConnectionsHandler(c: any) {
