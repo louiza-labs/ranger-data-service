@@ -11,6 +11,8 @@ const supabase = createClient(supabaseUrl as string, supabaseAnonKey as string);
 
 export async function uploadConnections({ connections, user_id }: { connections: any[]; user_id: string }) {
 	try {
+		console.log("the user id", user_id);
+
 		const formattedConnections = connections.map((connection) => {
 			return {
 				...connection,

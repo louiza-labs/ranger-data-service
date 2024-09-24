@@ -53,13 +53,6 @@ export async function fetchLinkedInConnectionsAtRelevantJobsHandler(c: any) {
 		const allConnectionsWithJobs = addJobToConnection(filteredConnectionsForCompanies, jobs);
 		return c.json(allConnectionsWithJobs);
 	}
-
-	// Union of both connection sets (removing duplicates)
-	const unionOfConnections = Array.from(
-		new Set([...connectionsMatchingCompanyPreferences, ...connectionsMatchingPositionPreferences])
-	);
-	// Return the filtered union of relevant connections
-	return c.json(connectionsMatchingBothPreferences);
 }
 
 export async function uploadConnectionsHandler(c: any) {
@@ -73,6 +66,7 @@ export async function uploadConnectionsHandler(c: any) {
 
 		return c.json({ message: "Success uploading connections", success: true });
 	} catch (error) {
+		console.log("error uploading connections", error);
 		return c.json({ message: error, success: false });
 	}
 }

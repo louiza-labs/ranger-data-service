@@ -4,6 +4,7 @@ import { logger } from "hono/logger";
 import { bearerAuth } from "hono/bearer-auth";
 
 import accountRoute from "./routes/account";
+import companiesRoute from "./routes/companies";
 import connectionsRoute from "./routes/connections";
 import emailsRoute from "./routes/email";
 import jobsRoute from "./routes/jobs";
@@ -19,5 +20,6 @@ app.route("/api", connectionsRoute);
 app.route("/api", jobsRoute);
 app.route("/api", accountRoute);
 app.route("/api", emailsRoute);
+app.route("/api", companiesRoute);
 
 export default app;
