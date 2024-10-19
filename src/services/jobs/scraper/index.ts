@@ -4,10 +4,12 @@ export const runJobScraper = async ({
 	position,
 	location,
 	offset,
+	companyJobsUrl,
 }: {
-	position: string;
+	position?: string;
 	location: string;
 	offset?: number;
+	companyJobsUrl?: string;
 }) => {
 	// Initialize the scraper instance
 	const scraper = new LinkedinScraper({
@@ -60,14 +62,14 @@ export const runJobScraper = async ({
 	// Run queries concurrently
 	await scraper.run([
 		{
-			query: position ?? "Product Manager",
+			query: position ?? undefined,
 			options: {
-				pageOffset: offset ?? 2,
-				locations: [location ?? "New York"],
+				pageOffset: offset ?? 1,
+				locations: location ? [location] : ["United States"],
 				filters: {
 					type: [typeFilter.FULL_TIME],
 					time: timeFilter.WEEK,
-
+					companyJobsUrl: companyJobsUrl ?? undefined,
 					onSiteOrRemote: [onSiteOrRemoteFilter.ON_SITE, onSiteOrRemoteFilter.REMOTE, onSiteOrRemoteFilter.HYBRID],
 					// baseSalary: baseSalaryFilter.SALARY_100K,
 				},

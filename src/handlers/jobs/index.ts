@@ -60,10 +60,10 @@ export async function getRelevantJobsByConnectionsAndPreferences(c: any) {
 }
 
 export async function getScrapedJobsHandler(c: any) {
-	const { position, location, offset } = await c.req.query();
+	const { position, location, offset, companyJobsUrl } = await c.req.query();
 	const { data: jobsFromDB } = await getJobsFromLinkedinFromDB();
 
-	const result = await runJobScraper({ position, location, offset });
+	const result = await runJobScraper({ position, location, offset, companyJobsUrl });
 	const normalizedFetchedJobResults = normalizeJobData(result);
 	if (jobsFromDB?.length && normalizedFetchedJobResults?.length) {
 		// Filter jobs that are not already in the DB
@@ -73,7 +73,6 @@ export async function getScrapedJobsHandler(c: any) {
 
 		if (filteredJobsFromLinkedin.length) {
 			// Upload new jobs
-			console.log("the filteredJobsFromLinkedin", filteredJobsFromLinkedin);
 			const res = await uploadJobsFromLinkedInToDB(filteredJobsFromLinkedin);
 			return c.json([...filteredJobsFromLinkedin, jobsFromDB]);
 		}
