@@ -11,7 +11,6 @@ const supabase = createClient(process.env.SUPABASE_URL as string, process.env.SU
 
 // Generates the Google OAuth URL
 export const getGoogleAuthUrl = (state: string): string => {
-	console.log("Generating Google Auth URL");
 	return oauth2Client.generateAuthUrl({
 		access_type: "offline",
 		scope: ["https://www.googleapis.com/auth/gmail.readonly"],
@@ -79,36 +78,6 @@ export const refreshAccessToken = async (refreshToken: string, userId: string) =
 	} catch (error) {
 		console.error("Error refreshing access token:", error);
 		throw new Error("Failed to refresh access token");
-	}
-};
-
-// Fetch user's emails from Gmail API
-export const getEmails = async (userId: string) => {
-	try {
-		const tokens = await ensureFreshTokens(userId);
-
-		oauth2Client.setCredentials({
-			access_token: tokens.access_token,
-			refresh_token: tokens.refresh_token,
-		});
-
-		const gmail = google.gmail({ version: "v1", auth: oauth2Client });
-
-		const response = await gmail.users.messages.list({ userId: "me", maxResults: 10 });
-		console.log("Response:", response);
-		const messages = response.data.messages || [];
-
-		const emails = await Promise.all(
-			messages.map(async (msg) => {
-				const emailDetails = await gmail.users.messages.get({ userId: "me", id: msg.id! });
-				return emailDetails.data;
-			})
-		);
-
-		return emails;
-	} catch (error) {
-		console.error("Error fetching emails:", error);
-		throw new Error("Failed to fetch emails");
 	}
 };
 

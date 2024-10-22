@@ -1,5 +1,5 @@
 import { Context } from "hono";
-import { ensureFreshTokens, exchangeCodeForTokens, getEmails, getGoogleAuthUrl } from "../../../services/auth/google";
+import { ensureFreshTokens, exchangeCodeForTokens, getGoogleAuthUrl } from "../../../services/auth/google";
 
 // Initiates Google OAuth
 export const initiateGoogleAuth = async (c: Context) => {
@@ -59,23 +59,5 @@ export const refreshTokenMiddleware = async (c: Context, next: () => Promise<voi
 		await next();
 	} catch (error) {
 		return c.json({ error: "Failed to refresh token" }, 401);
-	}
-};
-
-export const handleGetEmails = async (c: Context) => {
-	try {
-		console.log("Handling get emails request");
-		const { user_id } = c.req.query();
-		console.log("Requested user ID:", user_id);
-
-		// Verify that the requested userId matches the one in the JWT
-
-		await ensureFreshTokens(user_id);
-		const emails = await getEmails(user_id);
-		console.log("Emails fetched:", emails);
-		return c.json(emails);
-	} catch (error) {
-		console.error("Error fetching emails:", error);
-		return c.json({ error: "Failed to fetch emails" }, 500);
 	}
 };
