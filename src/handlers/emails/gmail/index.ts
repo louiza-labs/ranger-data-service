@@ -1,7 +1,8 @@
 import { Context } from "hono";
-import { determineRecruitmentStatus } from "../../../services/ai";
 import { ensureFreshTokens } from "../../../services/auth/google";
-import { getGmailEmails } from "../../../services/emails/gmail";
+import { getAllGmailEmails, getGmailEmails } from "../../../services/emails/gmail";
+
+const TIMEOUT = 30000; // 30 seconds timeout
 
 export const refreshTokenMiddleware = async (c: Context, next: () => Promise<void>) => {
 	try {
@@ -16,97 +17,64 @@ export const refreshTokenMiddleware = async (c: Context, next: () => Promise<voi
 export const handleGetEmails = async (c: Context) => {
 	try {
 		const userId = c.req.query("user_id");
+		const pageToken = c.req.query("pageToken");
+		const pageSize = parseInt(c.req.query("pageSize") || "20");
+
 		if (!userId) {
 			return c.json({ error: "User ID is required" }, 400);
 		}
 
-		// Verify that the requested userId matches the one in the JWT
-		// TODO: Implement JWT verification
+		// Create an AbortController for timeout management
+		const controller = new AbortController();
+		const timeoutId = setTimeout(() => {
+			controller.abort();
+		}, TIMEOUT);
 
-		await ensureFreshTokens(userId);
-		const allEmails = await getGmailEmails(userId);
-		console.log("All emails count:", allEmails.length);
-		const jobApplicationEmails = await filterJobApplicationEmails(allEmails);
-		console.log("Job application emails count:", jobApplicationEmails.length);
-		const organizedEmails = await addJobStatusToEmails(jobApplicationEmails);
-		console.log("Organized emails count:", organizedEmails.length);
-		return c.json(organizedEmails);
+		try {
+			const emailsResult = await getGmailEmails(userId, {
+				pageSize,
+				pageToken,
+			});
+
+			clearTimeout(timeoutId);
+
+			return c.json({
+				emails: Array.isArray(emailsResult.emails) ? emailsResult.emails : [],
+				pagination: {
+					nextPageToken: emailsResult.nextPageToken,
+					hasMore: emailsResult.hasMore,
+				},
+			});
+		} catch (error) {
+			clearTimeout(timeoutId);
+			if (error.name === "AbortError") {
+				return c.json({ error: "Request timed out" }, 504);
+			}
+			throw error;
+		}
 	} catch (error) {
-		console.error("Error processing emails:", error);
-		return c.json({ error: "Failed to process emails" }, 500);
+		console.error("Error in handleGetEmails:", error);
+		return c.json(
+			{
+				error: "Failed to process request",
+				details: error.message,
+			},
+			500
+		);
 	}
 };
 
-async function filterJobApplicationEmails(emails: any[]): Promise<any[]> {
-	const filteredEmails = [];
-	console.log("the emailz", emails);
-
-	for (const email of emails) {
-		if (!email.headers) continue;
-		("");
-		const subject = email.headers.find((header: any) => header.name === "Subject");
-		if (!subject) continue;
-		const subjectText = subject.value;
-
-		if (isJobRelatedSubject(subjectText)) {
-			filteredEmails.push(email);
-			// const { emailType, confidence } = await determineEmailType(subjectText, true);
-			// if (emailType !== "other" && confidence > 0.7) {
-			// 	filteredEmails.push(email);
-			// }
+export const handleGetAllEmails = async (c: Context) => {
+	try {
+		const userId = c.req.query("user_id");
+		if (!userId) {
+			return c.json({ error: "User ID is required" }, 400);
 		}
+
+		const result = await getAllGmailEmails(userId);
+		return c.json(result);
+	} catch (error) {
+		console.error("Error in handleGetAllEmails:", error);
+		return c.json({ error: "Failed to process request" }, 500);
 	}
-	return filteredEmails;
-}
-
-async function addJobStatusToEmails(emails: any[]): Promise<any[]> {
-	return Promise.all(
-		emails.map(async (email) => {
-			const subject = email.headers.find((header: any) => header.name === "Subject").value;
-			const body = email.body || "";
-			const { status, confidence }: any = await determineRecruitmentStatus(subject + "\n" + body, false);
-			return {
-				...email,
-				jobStatus: confidence > 0.7 ? status : "unknown",
-			};
-		})
-	);
-}
-
-function isJobRelatedSubject(subject: string): boolean {
-	const jobRelatedKeywords = [
-		// Application
-		"job application",
-		"apply",
-		"applied",
-		"application to",
-		"applying to",
-		"application submitted",
-		"your interest in",
-		// Offer
-		"job offer",
-		"offer letter",
-		"employment offer",
-		// Interview
-		"interview",
-		"phone screen",
-		"coding challenge",
-		"technical assessment",
-		// Rejection
-		"application status",
-		"thank you for your interest",
-		"position filled",
-		// General
-		"job opportunity",
-		"career",
-		"position",
-		"employment",
-		"hiring",
-		"recruiter",
-		"talent acquisition",
-		"human resources",
-	];
-
-	const lowercaseSubject = subject.toLowerCase();
-	return jobRelatedKeywords.some((keyword) => lowercaseSubject.includes(keyword));
-}
+};

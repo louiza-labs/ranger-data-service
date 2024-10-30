@@ -1,10 +1,13 @@
 import { createClient } from "@supabase/supabase-js";
 import { google } from "googleapis";
 
+const localRedirectUri = "http://localhost:8080/api/auth/google/callback";
+
 const oauth2Client = new google.auth.OAuth2(
 	process.env.GOOGLE_CLIENT_ID ?? "488924934656-dj5h1msb2nv0p3gruf93ghmbch71sdcf.apps.googleusercontent.com",
 	process.env.GOOGLE_CLIENT_SECRET ?? "GOCSPX-_087567891234567890",
-	process.env.REDIRECT_URI ?? "http://localhost:8000/api/auth/google/callback"
+	process.env.REDIRECT_URI ?? localRedirectUri
+	//  "https://hermes-data-service-muddy-cloud-3029.fly.dev/api/auth/google/callback"
 );
 
 const supabase = createClient(process.env.SUPABASE_URL as string, process.env.SUPABASE_ANON_KEY as string);
@@ -44,6 +47,7 @@ export const exchangeCodeForTokens = async (code: string, userId: string) => {
 
 // Retrieve tokens from Supabase
 export const getTokensFromSupabase = async (userId: string) => {
+	console.log("fetching tokens for user:", userId);
 	const { data, error } = await supabase
 		.from("user_tokens")
 		.select("access_token, refresh_token, expiry_date")

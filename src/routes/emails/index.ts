@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 
-import { handleGetEmails } from "../../handlers/emails/gmail";
+import { handleGetAllEmails, handleGetEmails } from "../../handlers/emails/gmail";
 type Variables = {
 	jwtPayload: {
 		sub: string; // User ID
@@ -10,5 +10,5 @@ type Variables = {
 const emails = new Hono();
 
 emails.get("/emails/google", handleGetEmails);
-
+emails.get("/emails/google/all", handleGetAllEmails);
 export default emails;

@@ -1,5 +1,5 @@
 import { generateMatchingJobsForConnections } from "../../lib/intros";
-import { getPreferences } from "../../services/account/preferences";
+import { getPreferences } from "../../services/account/verify/preferences";
 import { getLinkedinConnectionsFromDB } from "../../services/connections/linkedin";
 import { getJobsFromLinkedin, getJobsFromLinkedinFromDB, uploadJobsFromLinkedInToDB } from "../../services/jobs";
 export async function getJobs(c: any) {
