@@ -20,11 +20,13 @@ export async function updateApplicationStatusHandler(c: Context) {
 
 export async function getApplicationsHandler(c: Context) {
 	const userId = c.req.query("user_id");
-	const context = c.req.query("context");
+	const context = c.req.query("context") || "jobs";
 
 	if (!userId) {
 		return c.json({ error: "User ID is required" }, 400);
 	}
+	console.log("user_id", userId);
+	console.log("context", context);
 
 	const result = await getApplications(userId, context);
 

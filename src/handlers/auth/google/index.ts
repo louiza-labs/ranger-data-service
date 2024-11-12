@@ -24,17 +24,8 @@ export const handleGoogleCallback = async (c: Context) => {
 	const code = c.req.query("code");
 	const state = c.req.query("state");
 
-	console.log("Received code:", code);
-	console.log("Received state:", state);
-
-	if (!code) {
-		console.log("Authorization code is missing");
-		return c.json({ error: "Authorization code is missing" }, 400);
-	}
-
-	if (!state) {
-		console.log("State is missing");
-		return c.json({ error: "State is missing" }, 400);
+	if (!code || !state) {
+		return c.json({ error: "Missing required parameters" }, 400);
 	}
 
 	try {
@@ -43,12 +34,17 @@ export const handleGoogleCallback = async (c: Context) => {
 			return c.json({ error: "Invalid state" }, 400);
 		}
 
-		const tokens = await exchangeCodeForTokens(code, userId);
-		console.log("Tokens received:", tokens);
-		return c.redirect(`http://localhost:3000/?success=true&tokens=${JSON.stringify(tokens)}`);
+		const { tokens, email } = await exchangeCodeForTokens(code, userId);
+
+		// Redirect with both success and email info
+		const redirectUrl = new URL("http://localhost:3000/tracker/");
+		redirectUrl.searchParams.set("success", "true");
+		redirectUrl.searchParams.set("email", email);
+
+		return c.redirect(redirectUrl.toString());
 	} catch (error) {
 		console.error("OAuth callback failed:", error);
-		return c.json({ error: "OAuth callback failed", details: error }, 500);
+		return c.json({ error: "OAuth callback failed" }, 500);
 	}
 };
 

@@ -11,9 +11,22 @@ export const extractEmail = (str: string): string | null => {
 	return match ? match[0] : null;
 };
 
-export const parseDate = (dateString: string): string => {
-	const date = new Date(dateString);
-	return date.toISOString();
+export const parseDate = (dateString: string): string | null => {
+	try {
+		const cleanedDate = dateString.trim();
+		const date = new Date(cleanedDate);
+
+		// Check if the date is valid
+		if (isNaN(date.getTime())) {
+			console.warn(`Invalid date string received: ${dateString}`);
+			return null;
+		}
+
+		return date.toISOString();
+	} catch (error) {
+		console.error(`Error parsing date string: ${dateString}`, error);
+		return null;
+	}
 };
 
 export const cleanCompanyName = (name: string): string => {
