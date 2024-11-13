@@ -1,15 +1,18 @@
 import { createClient } from "@supabase/supabase-js";
 import { google } from "googleapis";
+import { EncryptionService } from "../../encryption";
 
 const localRedirectUri = "http://localhost:8080/api/auth/google/callback";
 
 const oauth2Client = new google.auth.OAuth2(
-	process.env.GOOGLE_CLIENT_ID ?? "488924934656-dj5h1msb2nv0p3gruf93ghmbch71sdcf.apps.googleusercontent.com",
-	process.env.GOOGLE_CLIENT_SECRET ?? "GOCSPX-_087567891234567890",
+	process.env.GOOGLE_CLIENT_ID,
+	process.env.GOOGLE_CLIENT_SECRET,
 	process.env.REDIRECT_URI ?? "https://hermes-data-service-muddy-cloud-3029.fly.dev/api/auth/google/callback"
 );
 
 const supabase = createClient(process.env.SUPABASE_URL as string, process.env.SUPABASE_ANON_KEY as string);
+
+const encryptionService = new EncryptionService(process.env.EMAIL_ENCRYPTION_KEY!);
 
 // Generates the Google OAuth URL
 export const getGoogleAuthUrl = (state: string): string => {
@@ -38,6 +41,14 @@ export const exchangeCodeForTokens = async (code: string, userId: string) => {
 
 		const expiryDate = tokens.expiry_date as number;
 
+		// Create account object and encrypt sensitive data
+		const newEmailAccount = {
+			email: await encryptionService.encrypt(email),
+			access_token: await encryptionService.encrypt(tokens.access_token!),
+			refresh_token: await encryptionService.encrypt(tokens.refresh_token!),
+			expiry_date: expiryDate,
+		};
+
 		// Check if user already has a row in user_tokens
 		const { data: existingData } = await supabase
 			.from("user_tokens")
@@ -45,17 +56,15 @@ export const exchangeCodeForTokens = async (code: string, userId: string) => {
 			.eq("user_id", userId)
 			.single();
 
-		const newEmailAccount = {
-			email,
-			access_token: tokens.access_token,
-			refresh_token: tokens.refresh_token,
-			expiry_date: expiryDate,
-		};
-
 		if (existingData) {
 			// Update existing accounts
 			const existingAccounts = existingData.email_accounts?.accounts || [];
-			const accountIndex = existingAccounts.findIndex((acc: any) => acc.email === email);
+			const accountIndex = await Promise.all(
+				existingAccounts.map(async (acc: any, index: number) => {
+					const decryptedEmail = await encryptionService.decrypt(acc.email);
+					return decryptedEmail === email ? index : -1;
+				})
+			).then((indices) => indices.find((index) => index !== -1) ?? -1);
 
 			if (accountIndex >= 0) {
 				existingAccounts[accountIndex] = newEmailAccount;
@@ -94,17 +103,38 @@ export const getTokensFromSupabase = async (userId: string) => {
 		throw new Error("Failed to retrieve tokens");
 	}
 
-	const emailAccounts = data?.email_accounts?.accounts || [];
-	console.log(`Found ${emailAccounts.length} email accounts for user ${userId}`);
-	return emailAccounts;
+	const encryptedAccounts = data?.email_accounts?.accounts || [];
+
+	// Decrypt all accounts
+	const decryptedAccounts = await Promise.all(
+		encryptedAccounts.map(async (account: any) => ({
+			...account,
+			email: await encryptionService.decrypt(account.email),
+			access_token: await encryptionService.decrypt(account.access_token),
+			refresh_token: await encryptionService.decrypt(account.refresh_token),
+		}))
+	);
+
+	console.log(`Found ${decryptedAccounts.length} email accounts for user ${userId}`);
+	return decryptedAccounts;
 };
 
 // Update tokens in Supabase
-export const updateTokensInSupabase = async (userId: string, updatedAccounts: any[]) => {
+export const updateTokensInSupabase = async (userId: string, accounts: any[]) => {
 	try {
+		// Encrypt all accounts before storing
+		const encryptedAccounts = await Promise.all(
+			accounts.map(async (account) => ({
+				...account,
+				email: await encryptionService.encrypt(account.email),
+				access_token: await encryptionService.encrypt(account.access_token),
+				refresh_token: await encryptionService.encrypt(account.refresh_token),
+			}))
+		);
+
 		await supabase
 			.from("user_tokens")
-			.update({ email_accounts: { accounts: updatedAccounts } })
+			.update({ email_accounts: { accounts: encryptedAccounts } })
 			.eq("user_id", userId);
 	} catch (error) {
 		console.error("Error updating tokens in Supabase:", error);
@@ -141,7 +171,7 @@ export const refreshAccessToken = async (refreshToken: string, userId: string, e
 
 // Check if the access token needs refreshing
 export const isTokenExpired = (expiryDate: number): boolean => {
-	if (!expiryDate) return true; // If no expiry date, assume expired
+	if (!expiryDate) return true;
 	const currentTime = Math.floor(Date.now() / 1000);
 	return currentTime >= expiryDate - 300; // Refresh 5 minutes before expiration
 };
@@ -152,39 +182,28 @@ export const ensureFreshTokens = async (userId: string) => {
 		const tokens = await getTokensFromSupabase(userId);
 		console.log(`Refreshing tokens for ${tokens.length} email accounts`);
 
-		// Add debug logging to see token state
-		tokens.forEach((token: any) => {
-			console.log(`Token state for ${token.email}:`, {
-				hasRefreshToken: !!token.refresh_token,
-				expiryDate: token.expiry_date,
-				isExpired: isTokenExpired(token.expiry_date),
-			});
-		});
-
-		// Refresh all expired tokens
 		const refreshedTokens = await Promise.all(
 			tokens.map(async (tokenData: any) => {
 				if (isTokenExpired(tokenData.expiry_date)) {
 					console.log(`Refreshing token for email: ${tokenData.email}`);
 					try {
 						const newCredentials = await refreshAccessToken(tokenData.refresh_token, userId, tokenData.email);
-						console.log(`Successfully refreshed token for ${tokenData.email}`);
 						return {
 							...tokenData,
 							access_token: newCredentials.access_token,
 							refresh_token: newCredentials.refresh_token || tokenData.refresh_token,
 							expiry_date: newCredentials.expiry_date,
 						};
-					} catch (error: any) {
+					} catch (error) {
 						console.error(`Error refreshing token for ${tokenData.email}:`, error);
-						// Instead of returning the original token, we should indicate this token is invalid
-						throw new Error(`Failed to refresh token for ${tokenData.email}: ${error.message}`);
+						throw error;
 					}
 				}
 				return tokenData;
 			})
 		);
 
+		await updateTokensInSupabase(userId, refreshedTokens);
 		return refreshedTokens;
 	} catch (error) {
 		console.error("Error in ensureFreshTokens:", error);

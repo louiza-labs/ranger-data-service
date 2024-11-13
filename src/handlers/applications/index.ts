@@ -28,7 +28,8 @@ export async function getApplicationsHandler(c: Context) {
 	console.log("user_id", userId);
 	console.log("context", context);
 
-	const result = await getApplications(userId, context);
+	const result = await getApplications(userId);
+	console.log("result", result.data);
 
 	if (!result.success) {
 		return c.json({ error: "Failed to fetch applications", details: result.error }, 500);

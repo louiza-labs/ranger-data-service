@@ -2,8 +2,10 @@ import { createClient } from "@supabase/supabase-js";
 import { convertEmailIdToDecimal } from "../../../lib/emails/helpers";
 import { determineCompanyName, determineJobRole, determineRecruitmentStatus } from "../../ai";
 import { createApplicationWithEmail } from "../../applications";
+import { EncryptionService } from "../../encryption";
 
 const supabase = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!);
+const encryptionService = new EncryptionService(process.env.EMAIL_ENCRYPTION_KEY!);
 
 export async function processAndStoreEmails(userId: string, emails: any[]) {
 	console.log(`Processing ${emails.length} emails for user ${userId}`);
@@ -30,83 +32,86 @@ export async function processAndStoreEmails(userId: string, emails: any[]) {
 				continue;
 			}
 
-			// Get company name
+			// Get company name and status from unencrypted data first
 			const company = await determineCompanyName(email.subject, email.body, email.senderEmail, email.receiverEmail);
+			const statusResult = await determineRecruitmentStatus(email.body, false);
+			const jobRole = await determineJobRole(email.subject + " " + email.body);
 
 			if (!company?.companyName) {
-				console.log(`No company name found for email: ${email.id}`);
+				console.log(`No company name found for email`);
 				continue;
 			}
-
-			// Determine recruitment status
-			const statusResult = await determineRecruitmentStatus(email.body, false);
-			console.log(`Determined status for email ${email.id}:`, statusResult);
-
-			// Use the determined status or fall back to 'applied'
-			const status = statusResult.status || "applied";
-
-			// Get job role if available
-			const jobRole = await determineJobRole(email.subject + " " + email.body);
 
 			// Determine the company contact (from company domain)
 			const companyDomain = company.companyName.toLowerCase().replace(/[^a-z0-9]/g, "");
 			const contact = email.senderEmail.toLowerCase().includes(companyDomain) ? email.senderEmail : email.receiverEmail;
 
 			// Find existing application with exact or fuzzy match
-			let applicationId = existingApplications?.find((app) => {
-				const appCompany = app.company?.toLowerCase().trim();
-				const emailCompany = company.companyName.toLowerCase().trim();
-				return appCompany === emailCompany;
-			})?.id;
+			let applicationId = undefined;
+			if (existingApplications) {
+				for (const app of existingApplications) {
+					const decryptedAppCompany = await encryptionService.decrypt(app.company);
+					if (decryptedAppCompany?.toLowerCase().trim() === company.companyName.toLowerCase().trim()) {
+						applicationId = app.id;
+						break;
+					}
+				}
 
-			// If no exact match found, try fuzzy matching
-			if (!applicationId && existingApplications) {
-				const fuzzyMatch = existingApplications.find((app) => {
-					const appCompany = app.company?.toLowerCase().trim();
-					const emailCompany = company.companyName.toLowerCase().trim();
-					return appCompany.includes(emailCompany) || emailCompany.includes(appCompany);
-				});
-				if (fuzzyMatch) {
-					applicationId = fuzzyMatch.id;
-					console.log(`Found fuzzy match for company ${company.companyName} -> ${fuzzyMatch.company}`);
+				// Fuzzy matching if no exact match
+				if (!applicationId) {
+					for (const app of existingApplications) {
+						const decryptedAppCompany = await encryptionService.decrypt(app.company);
+						const appCompany = decryptedAppCompany?.toLowerCase().trim() || "";
+						const emailCompany = company.companyName.toLowerCase().trim();
+						if (appCompany?.includes(emailCompany) || emailCompany.includes(appCompany)) {
+							applicationId = app.id;
+							console.log(`Found fuzzy match for company [REDACTED]`);
+							break;
+						}
+					}
 				}
 			}
 
-			// Create new application if none found
+			// Encrypt all sensitive data
+			const encryptedEmail = {
+				subject: (await encryptionService.encrypt(email.subject)) || "",
+				body: (await encryptionService.encrypt(email.body)) || "",
+				senderEmail: (await encryptionService.encrypt(email.senderEmail)) || "",
+				receiverEmail: (await encryptionService.encrypt(email.receiverEmail)) || "",
+				date: email.date,
+				threadId: (await encryptionService.encrypt(email.threadId)) || "",
+				snippet: (await encryptionService.encrypt(email.snippet || "")) || "" || "",
+			};
+
 			if (!applicationId) {
-				try {
-					const result = await createApplicationWithEmail(
-						userId,
-						email,
-						company,
-						status,
-						jobRole,
-						contact,
-						emailIdForDb
-					);
-					applicationId = result.data?.id;
-					processedCount++;
-					console.log(`Created new application ${applicationId} for company ${company.companyName}`);
-				} catch (error) {
-					console.error("Error creating application with email:", error);
-					errorCount++;
-					continue;
-				}
+				// Create new application with encrypted data
+				const result = await createApplicationWithEmail(
+					userId,
+					encryptedEmail,
+					{ companyName: (await encryptionService.encrypt(company.companyName)) || "" },
+					statusResult.status || "applied",
+					{ jobRole: (await encryptionService.encrypt(jobRole?.jobRole || "")) || "" },
+					(await encryptionService.encrypt(contact)) || "",
+					emailIdForDb
+				);
+				applicationId = result.data?.id;
+				processedCount++;
+				console.log(`Created new application for company [REDACTED]`);
 			} else {
-				// If application exists, just add the email
+				// If application exists, just add the encrypted email
 				const { error: emailError } = await supabase.from("processed_emails").insert({
 					id: emailIdForDb,
 					user_id: userId,
 					application_id: applicationId,
 					context: "jobs",
 					created_at: new Date().toISOString(),
-					email_subject: email.subject,
-					email_body: email.body,
-					email_sender_email: email.senderEmail,
-					email_receiver_email: email.receiverEmail,
+					email_subject: await encryptionService.encrypt(email.subject),
+					email_body: await encryptionService.encrypt(email.body),
+					email_sender_email: await encryptionService.encrypt(email.senderEmail),
+					email_receiver_email: await encryptionService.encrypt(email.receiverEmail),
 					date: email.date,
-					company: company.companyName,
-					thread_id: email.threadId,
+					company: await encryptionService.encrypt(company.companyName),
+					thread_id: await encryptionService.encrypt(email.threadId),
 				});
 
 				if (emailError) {
@@ -117,7 +122,7 @@ export async function processAndStoreEmails(userId: string, emails: any[]) {
 				processedCount++;
 			}
 		} catch (error) {
-			console.error(`Error processing email ${email.id}:`, error);
+			console.error(`Error processing email:`, error);
 			errorCount++;
 		}
 	}

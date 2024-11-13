@@ -3,9 +3,10 @@ import { ensureFreshTokens } from "../../../services/auth/google";
 import { getAllGmailEmails, getGmailEmails } from "../../../services/emails/gmail";
 import { processAndStoreEmails } from "../../../services/emails/processor";
 import { BatchResult } from "../../../services/emails/types";
+import { EncryptionService } from "../../../services/encryption";
 
 const TIMEOUT = 30000; // 30 seconds timeout
-
+const encryptionService = new EncryptionService(process.env.EMAIL_ENCRYPTION_KEY!);
 export const refreshTokenMiddleware = async (c: Context, next: () => Promise<void>) => {
 	try {
 		const { user_id } = c.req.query();
@@ -41,9 +42,22 @@ export const handleGetEmails = async (c: Context) => {
 				console.log(`Processed ${processedCount} emails with ${errorCount} errors`);
 			}
 
+			// Decrypt emails before sending response
+			const decryptedEmails = await Promise.all(
+				emailsResult.emails.map(async (email) => ({
+					...email,
+					subject: await encryptionService.decrypt(email.subject),
+					body: await encryptionService.decrypt(email.body),
+					senderEmail: await encryptionService.decrypt(email.senderEmail),
+					receiverEmail: await encryptionService.decrypt(email.receiverEmail),
+					threadId: await encryptionService.decrypt(email.threadId),
+					snippet: email.snippet ? await encryptionService.decrypt(email.snippet) : "",
+				}))
+			);
+
 			clearTimeout(timeoutId);
 			return c.json({
-				emails: Array.isArray(emailsResult.emails) ? emailsResult.emails : [],
+				emails: decryptedEmails,
 				pagination: {
 					nextPageToken: emailsResult.nextPageToken,
 					hasMore: emailsResult.hasMore,
@@ -65,7 +79,7 @@ export const handleGetEmails = async (c: Context) => {
 export const handleGetAllEmails = async (c: Context) => {
 	try {
 		const userId = c.req.query("user_id");
-		const maxEmails = parseInt(c.req.query("maxEmails") || "5000");
+		const maxEmails = parseInt(c.req.query("maxEmails") || "10000");
 		const maxPages = parseInt(c.req.query("maxPages") || "20");
 		const batchSize = parseInt(c.req.query("batchSize") || "50");
 
@@ -73,21 +87,30 @@ export const handleGetAllEmails = async (c: Context) => {
 			return c.json({ error: "User ID is required" }, 400);
 		}
 
-		// Create SSE connection if supported
-		const supportsSSE = c.req.header("accept")?.includes("text/event-stream");
-
 		// For non-SSE requests, collect all results
 		const allResults: BatchResult[] = [];
 		let totalProcessed = 0;
 		let totalErrors = 0;
 
-		await getAllGmailEmails(
+		const result = await getAllGmailEmails(
 			userId,
 			{ maxEmails, maxPages, batchSize, specificEmail: c.req.query("specificEmail") },
 			async (batchResult) => {
-				// Process and store each batch as it arrives
 				if (batchResult.emails.length > 0) {
-					const { processedCount, errorCount } = await processAndStoreEmails(userId, batchResult.emails);
+					// Decrypt before processing
+					const decryptedEmails = await Promise.all(
+						batchResult.emails.map(async (email) => ({
+							...email,
+							subject: await encryptionService.decrypt(email.subject),
+							body: await encryptionService.decrypt(email.body),
+							senderEmail: await encryptionService.decrypt(email.senderEmail),
+							receiverEmail: await encryptionService.decrypt(email.receiverEmail),
+							threadId: await encryptionService.decrypt(email.threadId),
+							snippet: email.snippet ? await encryptionService.decrypt(email.snippet) : "",
+						}))
+					);
+
+					const { processedCount, errorCount } = await processAndStoreEmails(userId, decryptedEmails);
 					totalProcessed += processedCount;
 					totalErrors += errorCount;
 				}
@@ -95,11 +118,14 @@ export const handleGetAllEmails = async (c: Context) => {
 			}
 		);
 
+		// Return final results
 		return c.json({
 			totalProcessed,
 			totalErrors,
-			isComplete: allResults[allResults.length - 1]?.isComplete,
-			reason: allResults[allResults.length - 1]?.reason,
+			isComplete: result.isComplete,
+			reason: result.reason,
+			processedCount: result.processedCount,
+			errorCount: result.errorCount,
 		});
 	} catch (error) {
 		console.error("Error in handleGetAllEmails:", error);

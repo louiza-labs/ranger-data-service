@@ -1,26 +1,18 @@
 import { google } from "googleapis";
-import { SUBJECT_KEYWORDS } from "../../../lib/constants";
 import { extractEmail, filterHeaders, getMessageBody, parseDate, sanitizeAndTruncate } from "../../../lib/emails";
 import { determineEmailTypeWithoutAI } from "../../../lib/emails/helpers";
 import { ensureFreshTokens, getTokensFromSupabase } from "../../auth/google";
 import { BatchResult, GetAllEmailsOptions } from "../types";
-import { createBatchResult, handleRetry } from "../utils/batchUtils";
 
-const oauth2Client = new google.auth.OAuth2(
-	process.env.GOOGLE_CLIENT_ID,
-	process.env.GOOGLE_CLIENT_SECRET,
-	process.env.REDIRECT_URI
-);
+const gmail = google.gmail("v1");
 
-// Initialize Supabase client
-
-// Add flag at the top with other constants
-const PROCESS_ALL_ACCOUNTS = false; // Toggle this to control single/multi account processing
-
-// Simplify getGmailEmails function
 export const getGmailEmails = async (
 	userId: string,
-	options = { pageSize: 50, pageToken: undefined as string | undefined, specificEmail: undefined as string | undefined }
+	options = {
+		pageSize: 50,
+		pageToken: undefined as string | undefined,
+		specificEmail: undefined as string | undefined,
+	}
 ) => {
 	try {
 		console.log("Getting Gmail emails for user:", userId);
@@ -35,7 +27,6 @@ export const getGmailEmails = async (
 
 		const allEmailResults = await Promise.all(
 			tokensToProcess.map(async (tokenData: any) => {
-				console.log(`Processing emails for account: ${tokenData.email}`);
 				try {
 					const oauth2ClientForAccount = new google.auth.OAuth2(
 						process.env.GOOGLE_CLIENT_ID,
@@ -43,33 +34,93 @@ export const getGmailEmails = async (
 						process.env.REDIRECT_URI
 					);
 
+					// Ensure we have fresh tokens
 					const freshTokens = await ensureFreshTokens(userId);
 					const currentToken = freshTokens.find((t) => t.email === tokenData.email);
 
-					if (!currentToken) {
-						console.error(`No token found for email: ${tokenData.email}`);
+					if (!currentToken?.access_token || !currentToken?.refresh_token) {
+						console.error(`Invalid tokens for email: [REDACTED]`);
 						return { emails: [], nextPageToken: null, hasMore: false, email: tokenData.email };
 					}
 
 					oauth2ClientForAccount.setCredentials({
 						access_token: currentToken.access_token,
 						refresh_token: currentToken.refresh_token,
+						expiry_date: currentToken.expiry_date,
 					});
 
-					const gmail = google.gmail({ version: "v1", auth: oauth2ClientForAccount });
+					// Verify token validity
+					try {
+						await oauth2ClientForAccount.getAccessToken();
+					} catch (tokenError) {
+						console.error(`Token validation failed for email: [REDACTED]`);
+						return { emails: [], nextPageToken: null, hasMore: false, email: tokenData.email };
+					}
 
+					// If looking for a specific email
+					if (options.specificEmail) {
+						const message = await gmail.users.messages.get({
+							auth: oauth2ClientForAccount,
+							userId: "me",
+							id: options.specificEmail,
+							format: "full",
+						});
+
+						if (!message.data) return { emails: [], nextPageToken: null };
+
+						const headers = filterHeaders(message.data.payload?.headers);
+						const subject = headers.find((h) => h.name === "Subject")?.value || "";
+						const from = headers.find((h) => h.name === "From")?.value || "";
+						const to = headers.find((h) => h.name === "To")?.value || "";
+						const date = headers.find((h) => h.name === "Date")?.value || "";
+						const body = getMessageBody(message.data);
+						const senderEmail = extractEmail(from);
+						const receiverEmail = extractEmail(to);
+
+						// Skip if the email is from the current account
+						if (senderEmail === tokenData.email) {
+							return { emails: [], nextPageToken: null };
+						}
+
+						return {
+							emails: [
+								{
+									id: message.data.id,
+									threadId: message.data.threadId,
+									snippet: sanitizeAndTruncate(message.data.snippet || "", 255),
+									headers,
+									body: sanitizeAndTruncate(body, 65535),
+									subject: sanitizeAndTruncate(subject, 255),
+									senderEmail,
+									receiverEmail,
+									date: parseDate(date),
+								},
+							],
+							nextPageToken: null,
+						};
+					}
+
+					// Regular email fetching
 					const response = await gmail.users.messages.list({
+						auth: oauth2ClientForAccount,
 						userId: "me",
-						q: `{${SUBJECT_KEYWORDS.join(" OR ")}} in:anywhere`,
 						maxResults: options.pageSize,
-						pageToken: options.pageToken || undefined,
+						pageToken: options.pageToken,
 					});
+
+					if (!response.data.messages) {
+						return { emails: [], nextPageToken: response.data.nextPageToken };
+					}
 
 					const messages = await Promise.all(
-						(response.data.messages || []).map(async (msg: any) => {
-							const message = await gmail.users.messages.get({ userId: "me", id: msg.id });
-							return message;
-						})
+						response.data.messages.map((message: any) =>
+							gmail.users.messages.get({
+								auth: oauth2ClientForAccount,
+								userId: "me",
+								id: message.id!,
+								format: "full",
+							})
+						)
 					);
 
 					// Process and filter emails
@@ -87,6 +138,7 @@ export const getGmailEmails = async (
 						if (senderEmail === tokenData.email) {
 							continue;
 						}
+
 						// Check if email is recruitment-related
 						const emailTypeResult = determineEmailTypeWithoutAI(subject, body, senderEmail || "", receiverEmail || "");
 
@@ -108,41 +160,26 @@ export const getGmailEmails = async (
 						}
 					}
 
-					console.log(`Found ${processedEmails.length} recruitment-related emails out of ${messages.length} total`);
-
 					return {
 						emails: processedEmails,
 						nextPageToken: response.data.nextPageToken,
-						hasMore: !!response.data.nextPageToken,
-						email: tokenData.email,
 					};
 				} catch (error) {
-					console.error(`Error processing emails for ${tokenData.email}:`, error);
-					return { emails: [], nextPageToken: null, hasMore: false, email: tokenData.email };
+					console.error(`Error processing email account ${tokenData.email}:`, error);
+					return { emails: [], nextPageToken: null, error };
 				}
 			})
 		);
 
-		// Log results
-		allEmailResults.forEach((result) => {
-			console.log(`Found ${result.emails.length} recruitment emails for ${result.email}`);
-		});
-
-		// Combine results from all accounts
-		const combinedEmails = allEmailResults.flatMap((result) => result.emails);
-		const hasMorePages = allEmailResults.some((result) => result.hasMore);
+		// Combine results from all email accounts
+		const allEmails = allEmailResults.flatMap((result) => result.emails);
+		const hasMore = allEmailResults.some((result) => result.nextPageToken);
+		const nextPageToken = allEmailResults.find((result) => result.nextPageToken)?.nextPageToken;
 
 		return {
-			emails: combinedEmails,
-			nextPageToken: hasMorePages
-				? JSON.stringify(
-						allEmailResults.map((r) => ({
-							email: r.email,
-							token: r.nextPageToken,
-						}))
-				  )
-				: undefined,
-			hasMore: hasMorePages,
+			emails: allEmails,
+			nextPageToken,
+			hasMore,
 		};
 	} catch (error) {
 		console.error("Error in getGmailEmails:", error);
@@ -152,123 +189,69 @@ export const getGmailEmails = async (
 
 export const getAllGmailEmails = async (
 	userId: string,
-	options: GetAllEmailsOptions = {
-		batchSize: 50,
-		maxEmails: 5000,
-		maxPages: 20,
-		specificEmail: undefined as string | undefined,
-	},
-	onBatchProcessed?: (result: BatchResult) => Promise<void>
-) => {
+	options: GetAllEmailsOptions,
+	onBatchProcessed?: (batchResult: BatchResult) => Promise<void>
+): Promise<BatchResult> => {
 	try {
-		let totalProcessed = 0;
-		let totalErrors = 0;
+		let allEmails: any[] = [];
+		let pageToken: string | undefined;
 		let pageCount = 0;
-		let retries = 0;
-		let pageTokens: Map<string, string | undefined> = new Map();
-		let hasMoreEmails = true; // Track if any account has more emails
+		let isComplete = false;
+		let reason: BatchResult["reason"];
 
-		const tokens = await getTokensFromSupabase(userId);
-		console.log(`Found ${tokens.length} email accounts to process`);
+		while (!isComplete) {
+			const result = await getGmailEmails(userId, {
+				pageSize: options.batchSize,
+				pageToken,
+				specificEmail: options.specificEmail,
+			});
 
-		do {
-			hasMoreEmails = false; // Reset at the start of each cycle
-			try {
-				for (const tokenData of tokens) {
-					// Skip this email account if it has no more pages
-					if (pageTokens.get(tokenData.email) === undefined && pageCount > 0) {
-						continue;
-					}
-
-					// Check limits
-					if (totalProcessed >= (options.maxEmails || Infinity)) {
-						return createBatchResult("MAX_EMAILS_REACHED", totalProcessed, totalErrors);
-					}
-
-					if (pageCount >= (options.maxPages || Infinity)) {
-						return createBatchResult("MAX_PAGES_REACHED", totalProcessed, totalErrors);
-					}
-
-					const batchResult = await processSingleBatch(userId, tokenData, pageTokens, options, totalProcessed);
-
-					// Update pageToken for this email account
-					if (batchResult.nextPageToken) {
-						pageTokens.set(tokenData.email, batchResult.nextPageToken);
-						hasMoreEmails = true; // This account has more emails
-					} else {
-						pageTokens.set(tokenData.email, undefined);
-					}
-
-					totalProcessed += batchResult.processedCount;
-					totalErrors += batchResult.errorCount;
-
-					if (onBatchProcessed) {
-						await onBatchProcessed(batchResult);
-					}
-				}
-
-				pageCount++;
-				retries = 0;
-				await new Promise((resolve) => setTimeout(resolve, 2000));
-			} catch (error) {
-				if (!handleRetry(error, retries)) {
-					return createBatchResult("MAX_RETRIES_REACHED", totalProcessed, totalErrors);
-				}
-				retries++;
+			if (result.emails.length > 0) {
+				allEmails = allEmails.concat(result.emails);
 			}
-		} while (
-			hasMoreEmails && // Changed condition to use our new flag
-			totalProcessed < (options.maxEmails || Infinity) &&
-			pageCount < (options.maxPages || Infinity)
-		);
 
-		return createBatchResult("COMPLETE", totalProcessed, totalErrors);
+			// Create batch result for callback
+			const batchResult: BatchResult = {
+				emails: result.emails,
+				isComplete: false,
+				reason: undefined,
+				processedCount: result.emails.length,
+				errorCount: 0,
+			};
+
+			// Call the callback if provided
+			if (onBatchProcessed) {
+				await onBatchProcessed(batchResult);
+			}
+
+			// Check completion conditions
+			if (!result.hasMore || !result.nextPageToken) {
+				isComplete = true;
+				reason = "COMPLETE";
+			} else if (options.maxEmails && allEmails.length >= options.maxEmails) {
+				isComplete = true;
+				reason = "MAX_EMAILS_REACHED";
+				allEmails = allEmails.slice(0, options.maxEmails);
+			} else if (options.maxPages && pageCount >= options.maxPages) {
+				isComplete = true;
+				reason = "MAX_PAGES_REACHED";
+			}
+
+			if (!isComplete) {
+				pageToken = result.nextPageToken;
+				pageCount++;
+			}
+		}
+
+		return {
+			emails: allEmails,
+			isComplete: true,
+			reason,
+			processedCount: allEmails.length,
+			errorCount: 0,
+		};
 	} catch (error) {
-		console.error("Fatal error in getAllGmailEmails:", error);
+		console.error("Error in getAllGmailEmails:", error);
 		throw error;
 	}
 };
-
-async function processSingleBatch(
-	userId: string,
-	tokenData: any,
-	pageTokens: Map<string, string | undefined>,
-	options: GetAllEmailsOptions,
-	totalProcessed: number
-): Promise<BatchResult> {
-	const email = tokenData.email;
-	let pageToken = pageTokens.get(email);
-
-	// Parse the pageToken if it's a stringified JSON
-	if (Array.isArray(pageToken)) {
-		pageToken = pageToken.find((t: any) => t.email === email)?.token;
-	} else if (typeof pageToken === "string" && pageToken.startsWith("[")) {
-		try {
-			const parsedToken = JSON.parse(pageToken);
-			const emailToken = parsedToken.find((t: any) => t.email === email);
-			pageToken = emailToken?.token;
-		} catch (e) {
-			console.error("Error parsing pageToken:", e);
-			pageToken = undefined;
-		}
-	}
-
-	console.log(`Fetching emails for ${email} with pageToken: ${pageToken}`);
-
-	const result = await getGmailEmails(userId, {
-		pageSize: options.batchSize,
-		pageToken: pageToken,
-		specificEmail: email,
-	});
-
-	const remainingCapacity = (options.maxEmails || Infinity) - totalProcessed;
-	const emailsToProcess = result.emails.slice(0, remainingCapacity);
-
-	return {
-		emails: emailsToProcess,
-		nextPageToken: result.nextPageToken,
-		isComplete: !result.nextPageToken,
-		processedCount: emailsToProcess.length,
-		errorCount: 0,
-	};
-}

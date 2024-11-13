@@ -12,10 +12,11 @@ export async function handleGetEmailAccounts(c: Context) {
 		// First refresh tokens
 		await ensureFreshTokens(userId);
 
-		// Then get the updated tokens/accounts
+		// Then get the updated tokens/accounts (they'll be automatically decrypted)
 		const emailAccounts = await getTokensFromSupabase(userId);
 
 		// Transform the response to only include necessary information
+		// Note: emails are already decrypted at this point
 		const sanitizedAccounts = emailAccounts.map((account: any) => ({
 			email: account.email,
 			isValid: !!account.access_token && !!account.refresh_token,

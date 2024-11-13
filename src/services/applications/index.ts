@@ -1,6 +1,8 @@
 import { createClient } from "@supabase/supabase-js";
+import { EncryptionService } from "../encryption";
 
 const supabase = createClient(process.env.SUPABASE_URL!, process.env.SUPABASE_ANON_KEY!);
+const encryptionService = new EncryptionService(process.env.EMAIL_ENCRYPTION_KEY!);
 
 export interface ProcessedEmail {
 	id: string;
@@ -47,7 +49,8 @@ export async function createApplicationWithEmail(
 	emailIdForDb: string
 ): Promise<{ success: boolean; data?: Application; error?: any }> {
 	try {
-		const { data, error } = await supabase.rpc("create_application_with_email", {
+		// Data is already encrypted, just pass it through
+		const encryptedData = {
 			p_user_id: userId,
 			p_context: "jobs",
 			p_company: company.companyName,
@@ -61,7 +64,9 @@ export async function createApplicationWithEmail(
 			p_email_receiver: email.receiverEmail,
 			p_email_date: email.date,
 			p_thread_id: email.threadId,
-		});
+		};
+
+		const { data, error } = await supabase.rpc("create_application_with_email", encryptedData);
 
 		if (error) throw error;
 		return { success: true, data };
@@ -88,97 +93,134 @@ export async function updateApplicationStatus(
 
 		if (error) throw error;
 
-		return { success: true, data };
+		// Decrypt data before returning
+		const decryptedData = data
+			? {
+					...data,
+					company: await encryptionService.decrypt(data.company),
+					position: data.position ? await encryptionService.decrypt(data.position) : null,
+					contact: data.contact ? await encryptionService.decrypt(data.contact) : null,
+			  }
+			: undefined;
+
+		return { success: true, data: decryptedData };
 	} catch (error) {
 		console.error("Error updating application status:", error);
 		return { success: false, error };
 	}
 }
 
+export async function updateApplication(
+	applicationId: string,
+	updates: {
+		company?: string;
+		position?: string;
+		status?: string;
+		contact?: string;
+	}
+): Promise<{ success: boolean; data?: Application; error?: any }> {
+	try {
+		// Encrypt sensitive fields before update
+		const encryptedUpdates: any = {
+			updated_at: new Date().toISOString(),
+		};
+
+		if (updates.company) {
+			encryptedUpdates.company = await encryptionService.encrypt(updates.company);
+		}
+		if (updates.position) {
+			encryptedUpdates.position = await encryptionService.encrypt(updates.position);
+		}
+		if (updates.status) {
+			encryptedUpdates.status = updates.status; // Status remains unencrypted for filtering
+		}
+		if (updates.contact) {
+			encryptedUpdates.contact = await encryptionService.encrypt(updates.contact);
+		}
+
+		const { data, error } = await supabase
+			.from("applications")
+			.update(encryptedUpdates)
+			.eq("id", applicationId)
+			.select()
+			.single();
+
+		if (error) throw error;
+
+		// Decrypt data before returning
+		const decryptedData = data
+			? {
+					...data,
+					company: await encryptionService.decrypt(data.company),
+					position: data.position ? await encryptionService.decrypt(data.position) : null,
+					contact: data.contact ? await encryptionService.decrypt(data.contact) : null,
+			  }
+			: undefined;
+
+		return { success: true, data: decryptedData };
+	} catch (error) {
+		console.error("Error updating application:", error);
+		return { success: false, error };
+	}
+}
+
 export async function getApplications(
-	userId: string,
-	context?: string
+	userId: string
 ): Promise<{ success: boolean; data?: Application[]; error?: any }> {
 	try {
-		// First get applications
 		const { data: applications, error: fetchError } = await supabase
 			.from("applications")
 			.select("*")
 			.eq("user_id", userId);
-		// .eq("context", context || "jobs");
 
 		if (fetchError) throw fetchError;
 
-		if (!applications || applications.length === 0) {
-			return { success: true, data: [] };
-		}
-		console.log("applications", applications);
+		// Debug log
+		console.log("Raw application:", applications[0]);
 
-		// Get associated email threads
-		const { data: emailThreads, error: emailError } = await supabase
+		// Get and decrypt email threads
+		const { data: emailThreads } = await supabase
 			.from("processed_emails")
-			.select(
-				`
-				id,
-				application_id,
-				email_subject,
-				email_body,
-				email_sender_email,
-				email_receiver_email,
-				date,
-				company,
-				context,
-				thread_id
-			`
-			)
+			.select("*")
 			.eq("user_id", userId)
 			.in(
 				"application_id",
 				applications.map((app) => app.id)
-			)
-			.order("date", { ascending: true }); // Order emails by date
+			);
 
-		if (emailError) throw emailError;
+		// Debug log
+		console.log("Raw email thread:", emailThreads?.[0]);
 
-		const threads = emailThreads || [];
+		// Try decrypting a single field to test the encryption service
+		const testDecrypt = await encryptionService.decrypt(applications[0].company);
+		console.log("Test decrypt of company:", testDecrypt);
 
-		// Group emails by application_id
-		const emailsByApplication = threads.reduce((acc, email) => {
-			if (!acc[email.application_id]) {
-				acc[email.application_id] = [];
-			}
-			acc[email.application_id].push({
-				id: email.id,
-				email_subject: email.email_subject,
-				email_body: email.email_body,
-				email_sender_email: email.email_sender_email,
-				email_receiver_email: email.email_receiver_email,
-				date: email.date,
-				company: email.company,
-				context: email.context,
-				thread_id: email.thread_id,
-				application_id: email.application_id,
-				created_at: email.date,
-				user_id: userId,
-			});
-			return acc;
-		}, {} as Record<string, ProcessedEmail[]>);
+		// Decrypt applications first
+		const decryptedApplications = await Promise.all(
+			applications.map(async (app) => {
+				const decryptedApp = await encryptionService.decryptApplicationData(app);
+				return {
+					...app,
+					...decryptedApp,
+				};
+			})
+		);
 
-		// Map applications to match interface
-		const applicationsWithThreads = applications.map((application) => ({
-			id: application.id,
-			user_id: application.user_id,
-			context: application.context || "jobs",
-			company: application.company,
-			position: application.position || undefined,
-			status: application.status,
-			created_at: application.created_at,
-			updated_at: application.updated_at,
-			contact: application.contact,
-			email_thread: emailsByApplication[application.id] || [],
+		// Then decrypt email threads
+		const decryptedThreads = await Promise.all(
+			(emailThreads ?? []).map(async (thread) => encryptionService.decryptProcessedEmail(thread))
+		);
+
+		// Combine them
+		const finalData = decryptedApplications.map((app) => ({
+			...app,
+			email_thread: decryptedThreads.filter((thread) => thread.application_id === app.id),
 		}));
 
-		return { success: true, data: applicationsWithThreads };
+		// Debug log
+		console.log("Final decrypted application:", finalData[0]);
+
+		return { success: true, data: finalData };
 	} catch (error) {
 		console.error("Error fetching applications:", error);
 		return { success: false, error };
