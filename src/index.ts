@@ -37,4 +37,7 @@ app.route("/api", accountRoute);
 app.route("/api", emailRoute);
 app.route("/api", companiesRoute);
 
-export default app;
+export default {
+	fetch: app.fetch,
+	port: 8080,
+};

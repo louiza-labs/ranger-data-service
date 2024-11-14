@@ -3,7 +3,7 @@ import { getApplicationsHandler, updateApplicationStatusHandler } from "../../ha
 
 const app = new Hono();
 
-app.put("/api/applications/:applicationId/status", updateApplicationStatusHandler);
+app.put("/applications/:applicationId/status", updateApplicationStatusHandler);
 app.get("/applications", getApplicationsHandler);
 
 export default app;

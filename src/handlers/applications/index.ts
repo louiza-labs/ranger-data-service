@@ -3,6 +3,7 @@ import { getApplications, updateApplicationStatus } from "../../services/applica
 
 export async function updateApplicationStatusHandler(c: Context) {
 	const applicationId = c.req.param("applicationId");
+	const userId = c.req.query("user_id");
 	const { newStatus } = await c.req.json();
 
 	if (!applicationId || !newStatus) {
