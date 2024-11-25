@@ -14,8 +14,8 @@ export const runJobScraper = async ({
 	// Initialize the scraper instance
 	const scraper = new LinkedinScraper({
 		headless: true,
-		slowMo: 300,
-		timeout: 300000,
+		slowMo: 500,
+		timeout: 600000,
 	});
 
 	const jobs: Array<any> = [];
@@ -45,7 +45,11 @@ export const runJobScraper = async ({
 
 	// Error handling
 	scraper.on(events.scraper.error, (err) => {
-		console.error(err);
+		console.error("Scraper error:", err);
+		if (err.message.includes("502")) {
+			console.log("Encountered 502 error, continuing with scraping...");
+			return;
+		}
 	});
 
 	// When the scraper ends
@@ -73,7 +77,7 @@ export const runJobScraper = async ({
 					onSiteOrRemote: [onSiteOrRemoteFilter.ON_SITE, onSiteOrRemoteFilter.REMOTE, onSiteOrRemoteFilter.HYBRID],
 					// baseSalary: baseSalaryFilter.SALARY_100K,
 				},
-				limit: 100,
+				limit: 30,
 			},
 		},
 	]);
